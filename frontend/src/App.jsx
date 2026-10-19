@@ -1,212 +1,43 @@
-import { useCallback, useEffect, useState } from "react";
-import {
-  Activity, Atom, BookOpen, Check, ChevronDown, CircleHelp, FlaskConical,
-  RotateCcw, Play, Plus, Waves, Zap
-} from "lucide-react";
-
-const API = "http://127.0.0.1:8000";
-const GATE_OPTIONS = [
-  { name: "X", label: "Pauli-X", description: "Bit flip: swaps |0⟩ and |1⟩." },
-  { name: "Y", label: "Pauli-Y", description: "Bit and phase flip." },
-  { name: "Z", label: "Pauli-Z", description: "Changes the phase of |1⟩." },
-  { name: "H", label: "Hadamard", description: "Creates or removes equal superpositions." },
-  { name: "S", label: "S gate", description: "Adds a π/2 phase to |1⟩." },
-  { name: "T", label: "T gate", description: "Adds a π/4 phase to |1⟩." },
-  { name: "RX", label: "Rotation X", description: "Rotates the state around the X axis." },
-  { name: "RY", label: "Rotation Y", description: "Rotates the state around the Y axis." },
-  { name: "RZ", label: "Rotation Z", description: "Rotates the state around the Z axis." },
-];
-const TARGETS = [
-  { value: "0", label: "|0⟩ — North pole" },
-  { value: "1", label: "|1⟩ — South pole" },
-  { value: "+", label: "|+⟩ — +X axis" },
-  { value: "-", label: "|−⟩ — −X axis" },
-  { value: "+i", label: "|+i⟩ — +Y axis" },
-  { value: "-i", label: "|−i⟩ — −Y axis" },
-];
-const emptyResult = {
-  state: { alpha: { real: 1, imag: 0, magnitude: 1, phase_degrees: 0 }, beta: { real: 0, imag: 0, magnitude: 0, phase_degrees: 0 } },
-  probabilities: { "0": 1, "1": 0 },
-  measurement: { shots: 1000, counts: { "0": 1000, "1": 0 }, frequencies: { "0": 1, "1": 0 } },
-  fidelity: { target: "+", value: 0.5 }, bloch: { x: 0, y: 0, z: 1 },
-  relative_phase_degrees: null, history: [], images: {}, qiskit_cross_check_error: 0,
-};
-
-function percent(v) { return `${(v * 100).toFixed(1)}%`; }
-function complexText(c) {
-  const re = Math.abs(c.real) < 1e-7 ? 0 : c.real;
-  const im = Math.abs(c.imag) < 1e-7 ? 0 : c.imag;
-  if (im === 0) return re.toFixed(3);
-  if (re === 0) return `${im.toFixed(3)}i`;
-  return `${re.toFixed(3)} ${im < 0 ? "−" : "+"} ${Math.abs(im).toFixed(3)}i`;
-}
-
-export default function App() {
-  const [initialState, setInitialState] = useState("0");
-  const [selectedGate, setSelectedGate] = useState("H");
-  const [angle, setAngle] = useState(90);
-  const [gates, setGates] = useState([]);
-  const [shots, setShots] = useState(1000);
-  const [target, setTarget] = useState("+");
-  const [result, setResult] = useState(emptyResult);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [activeTab, setActiveTab] = useState("overview");
-
-  const runSimulation = useCallback(async (nextGates = gates, nextInitial = initialState, nextShots = shots, nextTarget = target) => {
-    setLoading(true);
-    setError("");
-    try {
-      const response = await fetch(`${API}/api/simulate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          initial_state: nextInitial,
-          gates: nextGates.map(g => ({ name: g.name, angle: g.angle ?? 90 })),
-          shots: Number(nextShots),
-          target_state: nextTarget,
-        }),
-      });
-      if (!response.ok) {
-        const body = await response.json().catch(() => ({}));
-        throw new Error(body.detail?.[0]?.msg || body.detail || "The simulation request failed.");
-      }
-      setResult(await response.json());
-    } catch (e) {
-      setError(`Could not reach the Python API. Start the backend at ${API}. (${e.message})`);
-    } finally {
-      setLoading(false);
-    }
-  }, [gates, initialState, shots, target]);
-
-  useEffect(() => { runSimulation([], "0", 1000, "+"); }, []); // initial API health check/simulation
-
-  function applyGate() {
-    const gate = { name: selectedGate, ...(selectedGate.startsWith("R") ? { angle: Number(angle) } : {}) };
-    const next = [...gates, gate];
-    setGates(next);
-    runSimulation(next, initialState, shots, target);
-  }
-  function reset() {
-    setGates([]);
-    runSimulation([], initialState, shots, target);
-  }
-  function changeInitial(value) {
-    setInitialState(value);
-    setGates([]);
-    runSimulation([], value, shots, target);
-  }
-  function removeGate(index) {
-    const next = gates.filter((_, i) => i !== index);
-    setGates(next);
-    runSimulation(next, initialState, shots, target);
-  }
-
-  const selected = GATE_OPTIONS.find(g => g.name === selectedGate);
-  const state = result.state || emptyResult.state;
-  const probs = result.probabilities || emptyResult.probabilities;
-  const meas = result.measurement || emptyResult.measurement;
-
-  return (
-    <div className="app-shell">
-      <header className="topbar">
-        <div className="brand">
-          <div className="brand-icon"><Atom size={22} /></div>
-          <div><div className="brand-name">Qubit<span>Lab</span></div><div className="brand-caption">QUANTUM GATE SIMULATOR</div></div>
-        </div>
-        <nav className="top-nav">
-          <button className={activeTab === "overview" ? "nav-link active" : "nav-link"} onClick={() => setActiveTab("overview")}><Activity size={16}/> Simulator</button>
-          <button className={activeTab === "learn" ? "nav-link active" : "nav-link"} onClick={() => setActiveTab("learn")}><BookOpen size={16}/> Learn</button>
-        </nav>
-        <div className="live-pill"><span className="live-dot"/> LOCAL SIMULATOR</div>
-      </header>
-
-      <main className="main-content">
-        <section className="hero">
-          <div className="eyebrow"><span className="eyebrow-line"/> EXPLORE QUANTUM STATES</div>
-          <h1>One qubit. <span>Infinite possibilities.</span></h1>
-          <p>Apply quantum gates, observe state transformations, and build intuition for quantum computing — one experiment at a time.</p>
-          <div className="hero-tags"><span><Waves size={14}/> Bloch sphere</span><span><Zap size={14}/> 9 quantum gates</span><span><FlaskConical size={14}/> Measurement lab</span></div>
-        </section>
-
-        {activeTab === "learn" ? (
-          <section className="learn-grid">
-            <article className="panel lesson-card"><div className="panel-kicker">01 / THE BASICS</div><h2>What is a qubit?</h2><p>A qubit is a quantum system whose pure state can be written as <code>α|0⟩ + β|1⟩</code>, where α and β are complex amplitudes and <code>|α|² + |β|² = 1</code>.</p><p>Unlike a classical bit, a qubit can be in a superposition. A measurement in the computational basis returns 0 or 1 probabilistically.</p></article>
-            <article className="panel lesson-card"><div className="panel-kicker">02 / GATES</div><h2>What do gates do?</h2><p>Quantum gates are reversible transformations represented by unitary matrices. They rotate or reflect the qubit state while preserving total probability.</p><p>Try applying H to |0⟩, then apply H again. The two Hadamard gates return the qubit to |0⟩.</p></article>
-            <article className="panel lesson-card"><div className="panel-kicker">03 / MEASUREMENT</div><h2>Probability vs. outcome</h2><p>The state determines theoretical probabilities. A finite number of measurement shots produces counts that fluctuate around those probabilities.</p><p>Increase the number of shots to see the observed frequencies usually move closer to the theoretical values.</p></article>
-            <article className="panel lesson-card"><div className="panel-kicker">04 / FIDELITY</div><h2>How close are two states?</h2><p>For pure states, fidelity is <code>|⟨target|state⟩|²</code>. A value of 1 means the states are physically equivalent; 0 means they are orthogonal.</p><p>Global phase does not change a physical state, so fidelity correctly treats globally phased states as equivalent.</p></article>
-            <button className="primary-button" onClick={() => setActiveTab("overview")}>Open simulator <ChevronDown size={16}/></button>
-          </section>
-        ) : (
-          <>
-            {error && <div className="error-banner"><CircleHelp size={18}/><span>{error}</span></div>}
-            <section className="workspace">
-              <aside className="panel control-panel">
-                <div className="panel-heading"><div><div className="panel-kicker">EXPERIMENT SETUP</div><h2>Gate controls</h2></div><div className="heading-icon"><FlaskConical size={18}/></div></div>
-                <label className="field-label">INITIAL QUBIT STATE</label>
-                <div className="segmented">
-                  <button className={initialState === "0" ? "selected" : ""} onClick={() => changeInitial("0")}>|0⟩ <small>Ground</small></button>
-                  <button className={initialState === "1" ? "selected" : ""} onClick={() => changeInitial("1")}>|1⟩ <small>Excited</small></button>
-                </div>
-                <div className="field-row"><label className="field-label" htmlFor="gate-select">SELECT GATE</label><span className="field-note">Single-qubit</span></div>
-                <select id="gate-select" value={selectedGate} onChange={e => setSelectedGate(e.target.value)}>
-                  {GATE_OPTIONS.map(g => <option value={g.name} key={g.name}>{g.label} ({g.name})</option>)}
-                </select>
-                <div className="gate-description"><span className="gate-symbol">{selectedGate}</span><p>{selected?.description}</p></div>
-                {selectedGate.startsWith("R") && <div className="angle-control"><div className="field-row"><label className="field-label">ROTATION ANGLE</label><strong>{angle}°</strong></div><input type="range" min="-360" max="360" step="15" value={angle} onChange={e => setAngle(Number(e.target.value))}/><div className="range-labels"><span>−360°</span><span>0°</span><span>360°</span></div></div>}
-                <button className="primary-button full-width" onClick={applyGate} disabled={loading}><Plus size={17}/> Apply gate <span className="button-shortcut">↵</span></button>
-                <button className="secondary-button full-width" onClick={reset} disabled={loading}><RotateCcw size={15}/> Reset sequence</button>
-                <div className="sequence-block"><div className="field-row"><label className="field-label">GATE SEQUENCE</label><span className="count-badge">{gates.length} gates</span></div>
-                  {gates.length === 0 ? <div className="empty-sequence">Your sequence is empty.<br/><span>Add a gate to begin experimenting.</span></div> :
-                    <div className="gate-sequence">{gates.map((g, i) => <div className="sequence-item" key={`${g.name}-${i}`}><span className="sequence-index">{String(i + 1).padStart(2, "0")}</span><span className="sequence-gate">{g.name}{g.angle !== undefined ? <small> {g.angle}°</small> : ""}</span><button aria-label={`Remove gate ${i + 1}`} onClick={() => removeGate(i)}>×</button></div>)}</div>}
-                </div>
-              </aside>
-
-              <div className="visual-column">
-                <section className="panel bloch-panel">
-                  <div className="panel-heading"><div><div className="panel-kicker">STATE VISUALIZATION</div><h2>Bloch sphere <span className="subtle-title">/ 3D</span></h2></div><span className="live-label"><span className="live-dot"/> LIVE STATE</span></div>
-                  <div className="bloch-visual">{result.images?.bloch_sphere ? <img src={`data:image/png;base64,${result.images.bloch_sphere}`} alt="3D Bloch sphere showing the current qubit state"/> : <div className="image-placeholder">Waiting for simulation…</div>}</div>
-                  <div className="bloch-coordinates"><div><span>X</span><strong>{result.bloch?.x?.toFixed(3) ?? "0.000"}</strong></div><div><span>Y</span><strong>{result.bloch?.y?.toFixed(3) ?? "0.000"}</strong></div><div><span>Z</span><strong>{result.bloch?.z?.toFixed(3) ?? "1.000"}</strong></div></div>
-                </section>
-                <section className="panel circuit-panel">
-                  <div className="panel-heading"><div><div className="panel-kicker">QUANTUM CIRCUIT</div><h2>Your experiment</h2></div><span className="count-badge">{gates.length} operations</span></div>
-                  <div className="circuit-image">{result.images?.circuit ? <img src={`data:image/png;base64,${result.images.circuit}`} alt="Diagram of the initial state and quantum gate sequence"/> : <div className="image-placeholder">Circuit appears here</div>}</div>
-                </section>
-              </div>
-            </section>
-
-            <section className="metrics-grid">
-              <article className="panel state-panel"><div className="panel-heading"><div><div className="panel-kicker">STATE VECTOR</div><h2>Amplitude inspector</h2></div><div className="heading-icon"><Activity size={17}/></div></div>
-                <div className="amplitude-row"><div className="ket">|0⟩</div><div className="amplitude-info"><span className="muted">Amplitude α</span><strong>{complexText(state.alpha)}</strong><div className="amplitude-track"><span style={{width: `${Math.min(100, state.alpha.magnitude * 100)}%`}}/></div></div><div className="amplitude-prob"><strong>{percent(probs["0"])}</strong><span>probability</span></div></div>
-                <div className="amplitude-row"><div className="ket ket-one">|1⟩</div><div className="amplitude-info"><span className="muted">Amplitude β</span><strong>{complexText(state.beta)}</strong><div className="amplitude-track pink"><span style={{width: `${Math.min(100, state.beta.magnitude * 100)}%`}}/></div></div><div className="amplitude-prob"><strong>{percent(probs["1"])}</strong><span>probability</span></div></div>
-                <div className="phase-row"><span>Relative phase</span><strong>{result.relative_phase_degrees == null ? "Undefined" : `${result.relative_phase_degrees.toFixed(1)}°`}</strong></div>
-              </article>
-              <article className="panel probability-panel"><div className="panel-heading"><div><div className="panel-kicker">BORN RULE</div><h2>Measurement probabilities</h2></div><div className="heading-icon"><Activity size={17}/></div></div>
-                <div className="probability-bars"><div className="prob-item"><div className="prob-label"><span><i className="legend-dot cyan"/> |0⟩</span><strong>{percent(probs["0"])}</strong></div><div className="bar-track"><div className="bar-fill cyan-fill" style={{width: percent(probs["0"])}}/></div></div><div className="prob-item"><div className="prob-label"><span><i className="legend-dot pink-dot"/> |1⟩</span><strong>{percent(probs["1"])}</strong></div><div className="bar-track"><div className="bar-fill pink-fill" style={{width: percent(probs["1"])}}/></div></div></div>
-                <div className="formula-note"><code>P(0) = |α|²</code><code>P(1) = |β|²</code></div>
-              </article>
-              <article className="panel fidelity-panel"><div className="panel-heading"><div><div className="panel-kicker">STATE COMPARISON</div><h2>Fidelity</h2></div><div className="heading-icon"><Check size={17}/></div></div>
-                <label className="field-label" htmlFor="target-state">TARGET STATE</label><select id="target-state" value={target} onChange={e => {setTarget(e.target.value); runSimulation(gates, initialState, shots, e.target.value);}}>{TARGETS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}</select>
-                <div className="fidelity-score"><strong>{percent(result.fidelity?.value ?? 0)}</strong><span>state fidelity</span></div><div className="bar-track fidelity-track"><div className="bar-fill cyan-fill" style={{width: percent(result.fidelity?.value ?? 0)}}/></div><p className="micro-copy">1.0 = same physical state · 0.0 = orthogonal</p>
-              </article>
-            </section>
-
-            <section className="bottom-grid">
-              <article className="panel measurement-panel"><div className="panel-heading"><div><div className="panel-kicker">REPEATED MEASUREMENT</div><h2>Shot simulator</h2></div><span className="count-badge">Z basis</span></div>
-                <div className="shots-control"><label className="field-label" htmlFor="shots">NUMBER OF SHOTS</label><select id="shots" value={shots} onChange={e => setShots(Number(e.target.value))}><option value={100}>100 shots</option><option value={1000}>1,000 shots</option><option value={10000}>10,000 shots</option><option value={100000}>100,000 shots</option></select><button className="primary-button" onClick={() => runSimulation(gates, initialState, shots, target)} disabled={loading}><Play size={15}/>{loading ? "Simulating…" : "Run measurements"}</button></div>
-                <div className="counts-grid"><div className="count-card"><span>Outcome 0</span><strong>{meas.counts["0"].toLocaleString()}</strong><small>{percent(meas.frequencies["0"])} observed</small></div><div className="count-card"><span>Outcome 1</span><strong>{meas.counts["1"].toLocaleString()}</strong><small>{percent(meas.frequencies["1"])} observed</small></div></div>
-                <div className="comparison-list"><div><span>Theoretical P(0)</span><strong>{percent(probs["0"])}</strong><span>Observed</span><strong>{percent(meas.frequencies["0"])}</strong></div><div><span>Theoretical P(1)</span><strong>{percent(probs["1"])}</strong><span>Observed</span><strong>{percent(meas.frequencies["1"])}</strong></div></div>
-                <p className="micro-copy">Counts are randomly sampled on each run. Finite-shot results may differ from the theoretical probabilities.</p>
-              </article>
-              <article className="panel history-panel"><div className="panel-heading"><div><div className="panel-kicker">TRANSFORMATION LOG</div><h2>Step-by-step state</h2></div><span className="count-badge">{(result.history || []).length} steps</span></div>
-                <div className="history-list">{(result.history || []).map((step, i) => <div className="history-step" key={`${step.label}-${i}`}><div className="history-marker">{String(i).padStart(2, "0")}</div><div className="history-step-info"><strong>{step.label}</strong><span>α = {complexText(step.alpha)} · β = {complexText(step.beta)}</span></div>{i === (result.history || []).length - 1 && <span className="current-tag">CURRENT</span>}</div>)}</div>
-                <div className="validation-note"><Check size={15}/><span>Qiskit cross-check error: <strong>{Number(result.qiskit_cross_check_error ?? 0).toExponential(2)}</strong></span></div>
-              </article>
-            </section>
-          </>
-        )}
-        <footer><div className="footer-brand"><Atom size={16}/> QubitLab</div><span>Built for learning quantum computing · Simulated locally, not quantum hardware</span><span className="footer-status"><span className="live-dot"/> API-connected when running</span></footer>
-      </main>
-    </div>
-  );
+import {useCallback,useEffect,useMemo,useState} from 'react';
+import {Activity,Atom,BookOpen,Check,ChevronLeft,ChevronRight,Download,FlaskConical,GraduationCap,Play,Plus,RotateCcw,RotateCw,SkipBack,SkipForward,Waves,Zap} from 'lucide-react';
+const API='http://127.0.0.1:8000';
+const GATES=[['X','Pauli-X','Swaps |0⟩ and |1⟩.'],['Y','Pauli-Y','Bit and phase flip.'],['Z','Pauli-Z','Changes the phase of |1⟩.'],['H','Hadamard','Creates or removes equal superpositions.'],['S','S gate','Adds a π/2 phase to |1⟩.'],['T','T gate','Adds a π/4 phase to |1⟩.'],['RX','Rotation X','Rotates around the X axis.'],['RY','Rotation Y','Rotates around the Y axis.'],['RZ','Rotation Z','Rotates around the Z axis.']];
+const TARGETS=[['0','|0⟩ — North pole'],['1','|1⟩ — South pole'],['+','|+⟩ — +X axis'],['-','|−⟩ — −X axis'],['+i','|+i⟩ — +Y axis'],['-i','|−i⟩ — −Y axis']];
+const QUIZ=[{q:'What does a Hadamard gate do to |0⟩?',opts:['Turns it into |1⟩','Creates an equal superposition','Only changes global phase'],correct:1,why:'H|0⟩ = (|0⟩ + |1⟩)/√2, so both Z-basis outcomes have probability 1/2.'},{q:'Which gate swaps |0⟩ and |1⟩?',opts:['Pauli-X','Pauli-Z','T'],correct:0,why:'Pauli-X is the quantum analogue of a classical NOT gate.'},{q:'What does fidelity 1 mean for pure states?',opts:['The states are orthogonal','The states are physically equivalent','Both probabilities are 50%'],correct:1,why:'Fidelity |⟨target|state⟩|² equals 1 for the same physical state, including a global phase.'},{q:'Which bases are used for single-qubit tomography?',opts:['Only Z','X, Y and Z','Only X and Y'],correct:1,why:'Measurements along three Bloch axes estimate all three Bloch-vector components.'},{q:'What does RZ change for an equal superposition?',opts:['Relative phase','Total probability','Number of qubits'],correct:0,why:'RZ changes relative phase while preserving Z-basis probabilities.'}];
+const CHALLENGES=[{title:'Create a superposition',desc:'Starting from |0⟩, use H to get 50:50 probabilities.',gates:[{name:'H'}],test:r=>Math.abs(r.probabilities['0']-.5)<1e-6},{title:'Flip the qubit',desc:'Starting from |0⟩, make the final state |1⟩.',gates:[{name:'X'}],test:r=>r.probabilities['1']>.999999},{title:'Undo a Hadamard',desc:'Apply H twice to return to |0⟩.',gates:[{name:'H'},{name:'H'}],test:r=>r.probabilities['0']>.999999}];
+const pct=x=>`${(100*x).toFixed(1)}%`;
+function ctext(c){const re=Math.abs(c.real)<1e-7?0:c.real,im=Math.abs(c.imag)<1e-7?0:c.imag;if(!im)return re.toFixed(3);if(!re)return `${im.toFixed(3)}i`;return `${re.toFixed(3)} ${im<0?'−':'+'} ${Math.abs(im).toFixed(3)}i`;}
+async function download(path,payload,name){const r=await fetch(API+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});if(!r.ok)throw Error(`Request failed (${r.status})`);const u=URL.createObjectURL(await r.blob());const a=document.createElement('a');a.href=u;a.download=name;a.click();URL.revokeObjectURL(u);}
+function Bloch({vector}){const [rot,setRot]=useState({x:-18,y:25});const [drag,setDrag]=useState(null);const x=vector.x,y=vector.y,z=vector.z,rx=rot.x*Math.PI/180,ry=rot.y*Math.PI/180;const yy=y*Math.cos(rx)-z*Math.sin(rx),zz=y*Math.sin(rx)+z*Math.cos(rx),xx=x*Math.cos(ry)+zz*Math.sin(ry);const px=180+105*xx,py=145-105*yy;return <div className="bloch-wrap"><span className="sphere-hint">DRAG TO ROTATE VIEW</span><svg viewBox="0 0 360 290" className="bloch-svg" onPointerDown={e=>{e.currentTarget.setPointerCapture(e.pointerId);setDrag({x:e.clientX,y:e.clientY,rx:rot.x,ry:rot.y});}} onPointerMove={e=>{if(drag)setRot({x:Math.max(-80,Math.min(80,drag.rx+(e.clientY-drag.y)*.6)),y:drag.ry+(e.clientX-drag.x)*.7});}} onPointerUp={()=>setDrag(null)} onPointerCancel={()=>setDrag(null)}><defs><radialGradient id="sf" cx="35%" cy="25%"><stop offset="0" stopColor="#16435b" stopOpacity=".65"/><stop offset="1" stopColor="#102235" stopOpacity=".12"/></radialGradient><filter id="glow"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs><circle cx="180" cy="145" r="105" fill="url(#sf)" stroke="#42617b"/><ellipse cx="180" cy="145" rx="105" ry="36" fill="none" stroke="#38546e" strokeDasharray="4 4"/><ellipse cx="180" cy="145" rx="36" ry="105" fill="none" stroke="#38546e" strokeDasharray="4 4" transform={`rotate(${rot.y} 180 145)`}/><path d="M75 145H285 M180 40V250" stroke="#526d85" strokeDasharray="3 5"/><text x="180" y="23" fill="#d9e8f5" fontSize="12" textAnchor="middle">|0⟩</text><text x="180" y="278" fill="#d9e8f5" fontSize="12" textAnchor="middle">|1⟩</text><text x="55" y="137" fill="#9db4c9" fontSize="10">−X</text><text x="291" y="137" fill="#9db4c9" fontSize="10">+X</text><line x1="180" y1="145" x2={px} y2={py} stroke="#22d3ee" strokeWidth="3" strokeLinecap="round" filter="url(#glow)" className="vector-line"/><circle cx={px} cy={py} r="6" fill="#fbbf24" stroke="#fff2b7" strokeWidth="1.5" className="vector-tip"/><circle cx="180" cy="145" r="3" fill="#8ba4ba"/></svg><div className="sphere-footer"><span>Bloch vector</span><strong>({x.toFixed(3)}, {y.toFixed(3)}, {z.toFixed(3)})</strong></div></div>}
+export default function App(){
+ const [initial,setInitial]=useState('0'),[alphaReal,setAlphaReal]=useState('0.70710678'),[alphaImag,setAlphaImag]=useState('0'),[betaReal,setBetaReal]=useState('0.70710678'),[betaImag,setBetaImag]=useState('0'),[gates,setGates]=useState([]),[redoStack,setRedoStack]=useState([]),[selected,setSelected]=useState('H'),[angle,setAngle]=useState(90),[shots,setShots]=useState(1000),[target,setTarget]=useState('+');
+ const [result,setResult]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[tab,setTab]=useState('simulator'),[step,setStep]=useState(0),[playing,setPlaying]=useState(false),[tomography,setTomography]=useState(null),[answers,setAnswers]=useState({}),[passed,setPassed]=useState({});
+ const payload=useMemo(()=>({initial_state:initial,gates,shots:Number(shots),target_state:target}),[initial,gates,shots,target]);
+ const run=useCallback(async(p)=>{setBusy(true);setError('');try{const r=await fetch(API+'/api/simulate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});if(!r.ok)throw Error(`API returned ${r.status}`);const data=await r.json();setResult(data);setStep(data.history.length-1);return data;}catch(e){setError(`Cannot reach the Python backend at ${API}. Start the backend terminal. ${e.message}`);return null;}finally{setBusy(false);}},[]);
+ useEffect(()=>{run({initial_state:'0',gates:[],shots:1000,target_state:'+'});},[run]);
+ useEffect(()=>{if(!playing)return;const timer=setInterval(()=>setStep(s=>{const max=(result?.history?.length||1)-1;if(s>=max){setPlaying(false);return max;}return s+1;}),850);return()=>clearInterval(timer);},[playing,result]);
+ const current=result?.history?.[Math.min(step,(result?.history?.length||1)-1)];const state=current||result?.history?.[0];const active=GATES.find(g=>g[0]===selected);const initialLabel=typeof initial==='string'?`|${initial}⟩`:'Custom state';
+ const vector=useMemo(()=>{if(!state)return{x:0,y:0,z:1};const a=state.alpha,b=state.beta;return{x:2*(a.real*b.real+a.imag*b.imag),y:2*(a.real*b.imag-a.imag*b.real),z:a.real*a.real+a.imag*a.imag-b.real*b.real-b.imag*b.imag};},[state]);
+ function apply(){const next=[...gates,{name:selected,...(selected.startsWith('R')?{angle:Number(angle)}:{})}];setGates(next);setRedoStack([]);setTomography(null);run({...payload,gates:next});}
+ function reset(){setPlaying(false);setGates([]);setRedoStack([]);setStep(0);setTomography(null);run({...payload,gates:[]});}
+ function changeInitial(v){setInitial(v);setGates([]);setRedoStack([]);setStep(0);setTomography(null);run({...payload,initial_state:v,gates:[]});}
+ function applyCustomState(){const values=[alphaReal,alphaImag,betaReal,betaImag].map(Number);if(values.some(v=>!Number.isFinite(v))||values.every(v=>Math.abs(v)<1e-12)){setError('Enter valid amplitudes; all four values cannot be zero.');return;}const custom={alpha_real:values[0],alpha_imag:values[1],beta_real:values[2],beta_imag:values[3]};changeInitial(custom);setNotice('Custom initial state applied and normalized.');}
+ function undo(){if(!gates.length)return;const last=gates[gates.length-1],next=gates.slice(0,-1);setGates(next);setRedoStack(s=>[last,...s]);setTomography(null);setPlaying(false);run({...payload,gates:next});}
+ function redo(){if(!redoStack.length)return;const [first,...rest]=redoStack,next=[...gates,first];setGates(next);setRedoStack(rest);setTomography(null);run({...payload,gates:next});}
+ async function challenge(i){const c=CHALLENGES[i];setTab('simulator');setInitial('0');setGates(c.gates);setRedoStack([]);setTomography(null);const r=await run({...payload,initial_state:'0',gates:c.gates});if(r)setPassed(p=>({...p,[i]:c.test(r)}));}
+ async function doTomography(){setBusy(true);setError('');try{const r=await fetch(API+'/api/tomography',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});if(!r.ok)throw Error(`API returned ${r.status}`);setTomography(await r.json());}catch(e){setError(e.message);}finally{setBusy(false);}}
+ async function exportReport(kind){try{await download(`/api/export/${kind}`,payload,`qubitlab-experiment.${kind}`);setNotice(`${kind.toUpperCase()} report exported.`);}catch(e){setError(e.message);}}
+ const score=QUIZ.filter((q,i)=>answers[i]===q.correct).length;
+ return <div className="app-shell"><header className="topbar"><div className="brand"><div className="brand-icon"><Atom size={22}/></div><div><div className="brand-name">Qubit<span>Lab</span></div><div className="brand-caption">QUANTUM GATE SIMULATOR</div></div></div><nav className="top-nav"><button className={tab==='simulator'?'nav-link active':'nav-link'} onClick={()=>setTab('simulator')}><Activity size={16}/> Simulator</button><button className={tab==='learn'?'nav-link active':'nav-link'} onClick={()=>setTab('learn')}><GraduationCap size={16}/> Learn & quiz</button></nav><div className="live-pill"><span className="live-dot"/> LOCAL SIMULATOR</div></header>
+ <main className="main-content"><section className="hero"><div className="eyebrow"><span className="eyebrow-line"/> EXPLORE QUANTUM STATES</div><h1>One qubit. <span>Infinite possibilities.</span></h1><p>Build gate sequences, watch the state evolve, measure outcomes, and learn the quantum ideas behind every transformation.</p><div className="hero-tags"><span><Waves size={14}/> Bloch sphere</span><span><Zap size={14}/> 9 quantum gates</span><span><FlaskConical size={14}/> Tomography lab</span></div></section>
+ {error&&<div className="error-banner">{error}</div>}{notice&&<div className="notice-banner" onClick={()=>setNotice('')}><Check size={15}/>{notice}<button>×</button></div>}
+ {tab==='learn'?<section className="learn-layout"><div className="panel learn-intro"><div className="panel-kicker">QUANTUM LEARNING MODE</div><h2>Understand it by experimenting.</h2><p>Answer the quiz, then load challenges into the simulator.</p><button className="primary-button" onClick={()=>setTab('simulator')}>Return to simulator <ChevronRight size={15}/></button></div><div className="panel quiz-panel"><div className="panel-heading"><div><div className="panel-kicker">KNOWLEDGE CHECK</div><h2>Quantum gates quiz</h2></div><span className="count-badge">{score}/{QUIZ.length} correct</span></div>{QUIZ.map((q,i)=><div className="quiz-question" key={q.q}><strong>{i+1}. {q.q}</strong><div className="quiz-options">{q.opts.map((o,j)=><button key={o} className={answers[i]===j?(j===q.correct?'correct':'incorrect'):''} onClick={()=>setAnswers(a=>({...a,[i]:j}))}>{String.fromCharCode(65+j)}. {o}</button>)}</div>{answers[i]!==undefined&&<p className="quiz-explanation">{answers[i]===q.correct?'Correct! ':'Review: '}{q.why}</p>}</div>)}<button className="secondary-button" onClick={()=>setAnswers({})}><RotateCcw size={14}/> Reset quiz</button></div><div className="panel challenge-panel"><div className="panel-heading"><div><div className="panel-kicker">TRY IT YOURSELF</div><h2>Gate challenges</h2></div></div>{CHALLENGES.map((c,i)=><div className="challenge-row" key={c.title}><div className="challenge-copy"><strong>{c.title}</strong><p>{c.desc}</p>{passed[i]&&<span className="success-label"><Check size={13}/> Passed</span>}</div><button className="primary-button" onClick={()=>challenge(i)}>Load challenge</button></div>)}</div></section>:<>
+ <section className="workspace"><aside className="panel control-panel"><div className="panel-heading"><div><div className="panel-kicker">EXPERIMENT SETUP</div><h2>Gate controls</h2></div><div className="heading-icon"><FlaskConical size={18}/></div></div><label className="field-label">INITIAL QUBIT STATE</label><div className="segmented"><button className={initial==='0'?'selected':''} onClick={()=>changeInitial('0')}>|0⟩ <small>Ground</small></button><button className={initial==='1'?'selected':''} onClick={()=>changeInitial('1')}>|1⟩ <small>Excited</small></button></div><div className="custom-state-box"><div className="field-row"><label className="field-label">CUSTOM INITIAL STATE</label><span className="field-note">α|0⟩ + β|1⟩</span></div><p className="micro-copy custom-help">Enter the real and imaginary parts of α and β. The simulator normalizes the state automatically.</p><div className="amplitude-grid"><label>Re(α)<input type="number" step="any" value={alphaReal} onChange={e=>setAlphaReal(e.target.value)}/></label><label>Im(α)<input type="number" step="any" value={alphaImag} onChange={e=>setAlphaImag(e.target.value)}/></label><label>Re(β)<input type="number" step="any" value={betaReal} onChange={e=>setBetaReal(e.target.value)}/></label><label>Im(β)<input type="number" step="any" value={betaImag} onChange={e=>setBetaImag(e.target.value)}/></label></div><button className="secondary-button full-width" onClick={applyCustomState} disabled={busy}>Apply custom state</button></div><div className="field-row"><label className="field-label" htmlFor="gate">SELECT GATE</label><span className="field-note">Single qubit</span></div><select id="gate" value={selected} onChange={e=>setSelected(e.target.value)}>{GATES.map(g=><option value={g[0]} key={g[0]}>{g[1]} ({g[0]})</option>)}</select><div className="gate-description"><span className="gate-symbol">{selected}</span><p>{active?.[2]}</p></div>{selected.startsWith('R')&&<div className="angle-control"><div className="field-row"><label className="field-label">ROTATION ANGLE</label><strong>{angle}°</strong></div><input type="range" min="-360" max="360" step="1" value={angle} onChange={e=>setAngle(+e.target.value)}/><div className="range-labels"><span>−360°</span><span>1° precision</span><span>360°</span></div><p className="micro-copy">Use 1° increments to compare small rotation-angle deviations.</p></div>}<button className="primary-button full-width" onClick={apply} disabled={busy||gates.length>=100}><Plus size={16}/> Apply gate</button><div className="button-pair"><button className="secondary-button" onClick={undo} disabled={!gates.length||busy}><RotateCcw size={14}/> Undo</button><button className="secondary-button" onClick={redo} disabled={!redoStack.length||busy}><RotateCw size={14}/> Redo</button></div><button className="secondary-button full-width" onClick={reset} disabled={busy}><RotateCcw size={14}/> Reset sequence</button><div className="sequence-block"><div className="field-row"><label className="field-label">GATE SEQUENCE</label><span className="count-badge">{gates.length} gates</span></div>{!gates.length?<div className="empty-sequence">Your sequence is empty.<br/><span>Add a gate to begin experimenting.</span></div>:<div className="gate-sequence">{gates.map((g,i)=><div className="sequence-item" key={`${g.name}-${i}`}><span className="sequence-index">{String(i+1).padStart(2,'0')}</span><span className="sequence-gate">{g.name}{g.angle!==undefined?<small> {g.angle}°</small>:''}</span><button aria-label={`Remove gate ${i+1}`} onClick={()=>{const n=gates.filter((_,j)=>j!==i);setGates(n);setRedoStack([]);run({...payload,gates:n});}}>×</button></div>)}</div>}</div></aside>
+ <div className="visual-column"><section className="panel bloch-panel"><div className="panel-heading"><div><div className="panel-kicker">STATE VISUALIZATION</div><h2>Interactive Bloch sphere <span className="subtle-title">/ 3D view</span></h2></div><span className="live-label"><span className="live-dot"/> LIVE STATE</span></div><Bloch vector={vector}/><div className="bloch-coordinates"><div><span>X</span><strong>{vector.x.toFixed(3)}</strong></div><div><span>Y</span><strong>{vector.y.toFixed(3)}</strong></div><div><span>Z</span><strong>{vector.z.toFixed(3)}</strong></div></div></section>
+ <section className="panel step-panel"><div className="panel-heading"><div><div className="panel-kicker">STEP-BY-STEP EXECUTION</div><h2>{state?.label||'Initial state'}</h2></div><span className="count-badge">Step {Math.min(step+1,result?.history?.length||1)} / {result?.history?.length||1}</span></div><input className="step-range" aria-label="Select simulation step" type="range" min="0" max={Math.max(0,(result?.history?.length||1)-1)} value={Math.min(step,(result?.history?.length||1)-1)} onChange={e=>{setPlaying(false);setStep(+e.target.value)}}/><div className="playback-controls"><button className="icon-button" title="First step" onClick={()=>{setPlaying(false);setStep(0)}}><SkipBack size={16}/></button><button className="icon-button" title="Previous step" onClick={()=>{setPlaying(false);setStep(s=>Math.max(0,s-1))}}><ChevronLeft size={18}/></button><button className="primary-button play-button" onClick={()=>{if(step>=(result?.history?.length||1)-1)setStep(0);setPlaying(p=>!p)}}><Play size={14}/>{playing?'Pause':'Play steps'}</button><button className="icon-button" title="Next step" onClick={()=>{setPlaying(false);setStep(s=>Math.min((result?.history?.length||1)-1,s+1))}}><ChevronRight size={18}/></button><button className="icon-button" title="Last step" onClick={()=>{setPlaying(false);setStep(Math.max(0,(result?.history?.length||1)-1))}}><SkipForward size={16}/></button></div>{state&&<div className="step-state"><div><span>α amplitude</span><strong>{ctext(state.alpha)}</strong></div><div><span>β amplitude</span><strong>{ctext(state.beta)}</strong></div></div>}<div className="circuit-strip"><span className="field-label">CIRCUIT TIMELINE</span><div className="timeline">{(result?.history||[]).map((h,i)=><button key={`${h.label}-${i}`} className={i===step?'timeline-node current':'timeline-node'} onClick={()=>{setPlaying(false);setStep(i)}}>{i===0?initialLabel:gates[i-1]?.name||'G'}</button>)}</div></div></section></div></section>
+ <section className="metrics-grid"><article className="panel metric-panel"><div className="panel-heading"><div><div className="panel-kicker">BORN RULE</div><h2>Probability chart</h2></div><Activity size={18} color="#67e8f9"/></div><div className="probability-bars">{['0','1'].map(k=><div className="prob-item" key={k}><div className="prob-label"><span><i className={k==='0'?'legend-dot':'legend-dot pink-dot'}/> |{k}⟩</span><strong>{pct(result?.probabilities?.[k]??(k==='0'?1:0))}</strong></div><div className="bar-track"><div className={`bar-fill ${k==='1'?'pink-fill':''}`} style={{width:pct(result?.probabilities?.[k]??(k==='0'?1:0))}}/></div></div>)}</div><div className="formula-note"><code>P(0) = |α|²</code><code>P(1) = |β|²</code></div></article>
+ <article className="panel metric-panel"><div className="panel-heading"><div><div className="panel-kicker">STATE COMPARISON</div><h2>Fidelity & phase</h2></div><Check size={18} color="#67e8f9"/></div><label className="field-label" htmlFor="target">TARGET STATE</label><select id="target" value={target} onChange={e=>{setTarget(e.target.value);run({...payload,target_state:e.target.value})}}>{TARGETS.map(t=><option key={t[0]} value={t[0]}>{t[1]}</option>)}</select><div className="fidelity-score"><strong>{pct(result?.fidelity?.value??0)}</strong><span>state fidelity</span></div><div className="bar-track"><div className="bar-fill" style={{width:pct(result?.fidelity?.value??0)}}/></div><div className="phase-row"><span>Relative phase</span><strong>{result?.relative_phase_degrees==null?'Undefined':`${result.relative_phase_degrees.toFixed(1)}°`}</strong></div><p className="micro-copy">Fidelity = |⟨target|state⟩|². Global phase is physically unobservable.</p></article>
+ <article className="panel metric-panel"><div className="panel-heading"><div><div className="panel-kicker">FINITE-SHOT EXPERIMENT</div><h2>Measurement lab</h2></div><FlaskConical size={18} color="#67e8f9"/></div><label className="field-label" htmlFor="shots">NUMBER OF SHOTS</label><select id="shots" value={shots} onChange={e=>setShots(+e.target.value)}><option value={100}>100 shots</option><option value={1000}>1,000 shots</option><option value={10000}>10,000 shots</option><option value={100000}>100,000 shots</option></select><button className="primary-button full-width" onClick={()=>run(payload)} disabled={busy}><Play size={14}/>{busy?'Simulating…':'Run measurements'}</button><div className="counts-grid">{['0','1'].map(k=><div className="count-card" key={k}><span>Outcome {k}</span><strong>{result?.measurement?.counts?.[k]?.toLocaleString()??'—'}</strong><small>{result?pct(result.measurement.frequencies[k]):'Observed frequency'}</small></div>)}</div><div className="comparison-list">{['0','1'].map(k=><div key={k}><span>P({k}) theoretical</span><strong>{pct(result?.probabilities?.[k]??0)}</strong><span>Observed</span><strong>{pct(result?.measurement?.frequencies?.[k]??0)}</strong></div>)}</div><p className="micro-copy">Finite-shot counts vary randomly around theoretical probabilities.</p></article></section>
+ <section className="bottom-grid"><article className="panel advanced-panel"><div className="panel-heading"><div><div className="panel-kicker">ADVANCED EXPERIMENT</div><h2>Quantum state tomography</h2></div><Waves size={18} color="#67e8f9"/></div><p className="body-copy">Estimate the Bloch vector using simulated measurements in X, Y and Z bases. The density matrix follows ρ = ½(I + xX + yY + zZ).</p><button className="primary-button" onClick={doTomography} disabled={busy}><FlaskConical size={15}/>{busy?'Measuring…':'Run tomography'}</button>{tomography&&<><div className="tomography-table"><div className="tomography-row table-head"><span>Basis</span><span>+1 count</span><span>−1 count</span><span>Estimated ⟨σ⟩</span></div>{tomography.measurements.map(m=><div className="tomography-row" key={m.basis}><strong>{m.basis}</strong><span>{m.plus}</span><span>{m.minus}</span><strong>{m.estimated_expectation.toFixed(3)}</strong></div>)}</div><div className="density-box"><span className="field-label">DENSITY MATRIX · REAL, IMAGINARY</span><code>{tomography.density_matrix_real_imag.map(row=>row.map(c=>`${c[0].toFixed(3)}${c[1]<0?'':'+'}${c[1].toFixed(3)}i`).join('   ')).join('\n')}</code></div><p className="micro-copy">{tomography.note}</p></>}</article><article className="panel advanced-panel"><div className="panel-heading"><div><div className="panel-kicker">SAVE YOUR WORK</div><h2>Experiment report</h2></div><Download size={18} color="#67e8f9"/></div><p className="body-copy">Export the current state, gate sequence, amplitudes, probabilities, measurement counts and fidelity.</p><button className="primary-button full-width" onClick={()=>exportReport('csv')}><Download size={15}/> Export CSV data</button><button className="secondary-button full-width" onClick={()=>exportReport('pdf')}><Download size={15}/> Export PDF report</button><div className="export-meta"><Check size={14}/> Includes step history and Qiskit verification.</div></article></section></>}
+ <footer><div className="footer-brand"><Atom size={16}/> QubitLab</div><span>Built for learning quantum computing · Simulation only, not quantum hardware</span><span className="footer-status"><span className="live-dot"/> Python API</span></footer></main></div>
 }

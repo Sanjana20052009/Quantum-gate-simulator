@@ -1,82 +1,70 @@
-# QubitLab — Interactive Quantum Gate Simulator
+# QubitLab — Interactive Quantum Gate Simulator (Upgraded)
 
-A learning-focused React + FastAPI app for exploring single-qubit quantum gates.
+React + Vite frontend, FastAPI backend, NumPy state engine, Qiskit cross-check, and report exports.
 
-## Features
-- Pauli-X, Y, Z; Hadamard H; S and T gates; RX, RY, RZ rotation gates
-- Build and clear a gate sequence
-- Complex state-vector amplitudes and measurement probabilities
-- Bloch sphere and circuit diagrams rendered by Matplotlib
-- Simulated measurement shots vs theoretical probabilities
-- Fidelity against target states |0>, |1>, |+>, |->, |+i>, |-i>
-- Qiskit statevector cross-check of the NumPy result
+## Included features
+- All nine gates: X, Y, Z, H, S, T, RX, RY, RZ
+- Animated, draggable SVG Bloch sphere
+- Step-by-step gate history, play/pause, previous/next, undo/redo
+- Theoretical probabilities and simulated measurement shots
+- Fidelity and relative-phase analysis
+- X/Y/Z-basis quantum state tomography with reconstructed density matrix
+- Interactive quizzes and gate challenges
+- CSV and PDF experiment report export
+- Qiskit state-vector verification
 
 ## Requirements
-- Python 3.10+ recommended
-- Node.js 18+ and npm
+Python 3.10+ and Node.js 18+ with npm.
 
-## Project structure
-```text
-quantum-gate-simulator/
-├── backend/
-│   ├── main.py
-│   └── requirements.txt
-└── frontend/
-    ├── index.html
-    ├── package.json
-    ├── vite.config.js
-    └── src/
-        ├── main.jsx
-        ├── App.jsx
-        └── styles.css
-```
-
-## 1. Start the backend
-Open a terminal in the project folder:
-
+## Backend setup
 ```bash
 cd backend
 python -m venv .venv
 ```
+Activate on Windows PowerShell: `\.venv\Scripts\Activate.ps1`  
+Windows CMD: `.venv\Scripts\activate.bat`  
+macOS/Linux: `source .venv/bin/activate`
 
-Activate the environment:
-- Windows PowerShell: `.\.venv\Scripts\Activate.ps1`
-- Windows Command Prompt: `.venv\Scripts\activate.bat`
-- macOS/Linux: `source .venv/bin/activate`
-
-Install dependencies and start the API:
-
+Then run:
 ```bash
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 uvicorn main:app --reload
 ```
+API: http://127.0.0.1:8000 · API docs: http://127.0.0.1:8000/docs
 
-Backend API: http://127.0.0.1:8000  
-Interactive API docs: http://127.0.0.1:8000/docs
-
-## 2. Start the frontend
-Open a **second terminal** in the project folder:
-
+## Frontend setup
+Open a second terminal from the project root:
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
+Open the URL Vite prints, usually http://localhost:5173. Keep both terminals running.
 
-Open the URL Vite prints (usually http://localhost:5173).
+## Test checklist
+1. Apply X to |0⟩: P(0)=0 and P(1)=1.
+2. Reset and apply H: P(0)=P(1)=0.5.
+3. Apply H twice: returns to |0⟩.
+4. Try RX/RY/RZ with different angles.
+5. Use playback, undo, and redo.
+6. Run measurement shots and compare theoretical/observed frequencies.
+7. Run tomography in X/Y/Z bases; finite-shot estimates vary.
+8. Compare fidelity with target states.
+9. Complete quiz and load challenges.
+10. Enter a custom initial state using the real and imaginary parts of α and β.
+11. Adjust rotation angles in 1° steps for sensitivity comparisons.
+12. Export CSV and PDF.
 
-## How to use
-1. Pick the initial state |0> or |1>.
-2. Select a gate. For RX, RY, or RZ, set the angle in degrees.
-3. Press **Apply gate** to append it to the sequence.
-4. Inspect the state vector, Bloch sphere, circuit, and probabilities.
-5. Change shots and press **Run measurements**.
-6. Choose a target state to calculate fidelity.
+## Scientific notes
+- Rotation angles are input in degrees and converted to radians.
+- Pure-state fidelity is |<target|state>|^2.
+- Tomography simulates finite-shot measurements along X/Y/Z and uses linear inversion to estimate the density matrix. Finite-shot linear inversion can produce a nonphysical estimate; this is explained in the UI.
+- This is a learning simulator, not a connection to quantum hardware.
 
-## Notes
-- Gate rotation angles are entered in degrees in the UI and converted to radians in the API.
-- Measurement is simulated with NumPy's random sampler; finite-shot counts vary between runs.
-- Fidelity is `|<target|state>|²` for pure states.
-- Global phase does not change the physical qubit state. The displayed relative phase is the phase of alpha relative to beta when both amplitudes are nonzero.
-- This is a local educational simulator, not a connection to quantum hardware.
+## Custom initial states and rotation sensitivity
+
+- Enter Re(α), Im(α), Re(β), and Im(β) for the initial state α|0⟩ + β|1⟩.
+- The backend rejects non-finite or all-zero amplitudes and normalizes valid amplitudes before simulation.
+- The RX, RY, and RZ angle slider uses 1° steps. For a sensitivity experiment, compare the same initial state and gate using an ideal angle and nearby perturbed angles.
+- These experiments are simulations of state-vector calculations; they do not model hardware noise.
