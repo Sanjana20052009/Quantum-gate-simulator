@@ -2,6 +2,8 @@
 
 React + Vite frontend, FastAPI backend, NumPy state engine, Qiskit cross-check, and report exports.
 
+Deployments:https://quantum-gate-simulator-khaki.vercel.app/
+
 ## Included features
 - All nine gates: X, Y, Z, H, S, T, RX, RY, RZ
 - Animated, draggable SVG Bloch sphere
