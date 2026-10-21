@@ -1,5 +1,5 @@
 from __future__ import annotations
-import csv, io, math
+import csv, io, math,os
 from typing import Literal
 import numpy as np
 from fastapi import FastAPI
@@ -14,7 +14,26 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 
 app=FastAPI(title='QubitLab Quantum Simulator',version='2.0.0')
-app.add_middleware(CORSMiddleware,allow_origins=['http://localhost:5173','http://127.0.0.1:5173'],allow_credentials=True,allow_methods=['*'],allow_headers=['*'])
+
+app = FastAPI(title='QubitLab Quantum Simulator', version='2.0.0')
+
+frontend_url = os.getenv(
+    "FRONTEND_URL",
+    "https://quantum-gate-simulator-khaki.vercel.app"
+).rstrip("/")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        frontend_url,
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 GATES={'X','Y','Z','H','S','T','RX','RY','RZ'}; SQRT2=math.sqrt(2)
 TARGETS={'0':np.array([1,0],complex),'1':np.array([0,1],complex),'+':np.array([1,1],complex)/SQRT2,'-':np.array([1,-1],complex)/SQRT2,'+i':np.array([1,1j],complex)/SQRT2,'-i':np.array([1,-1j],complex)/SQRT2}
 class Gate(BaseModel):
